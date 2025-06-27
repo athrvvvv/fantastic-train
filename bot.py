@@ -12,7 +12,6 @@ from telegram.ext import (
     filters,
 )
 
-# Logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -87,7 +86,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ No numbers found. Send something like '100' or '45.50'.")
         return
 
-    # No active session
     amounts = [float(x) for x in re.findall(r'ZAR([\d.]+)', text)]
     if amounts:
         total = sum(amounts)
@@ -95,7 +93,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ No ZAR amounts found.")
 
-# Minimal HTTP server to bind Render's required port and keep service alive
 async def handle_healthcheck(request):
     return web.Response(text="I'm alive!")
 
@@ -109,18 +106,19 @@ async def start_webserver():
     await site.start()
     logging.info(f"🌐 Webserver running on port {port}")
 
-async def main():
-    # Start the webserver in the background
-    asyncio.create_task(start_webserver())
+def main():
+    # Start aiohttp webserver in background (in a new asyncio task)
+    loop = asyncio.get_event_loop()
+    loop.create_task(start_webserver())
 
-    # Start the Telegram bot application
+    # Create Telegram bot application
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("calcy", calcy))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     logging.info("🤖 Telegram bot started and polling...")
-    await application.run_polling()
+    application.run_polling()  # This internally runs the event loop
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
