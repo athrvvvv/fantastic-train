@@ -1,6 +1,8 @@
 import os
 import re
 import logging
+import asyncio
+from aiohttp import web
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -16,13 +18,8 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Bot token from Render environment variable
 BOT_TOKEN = os.environ.get("TELEG")
-
-# Allowed user (BRO)
 ALLOWED_USER_ID = 6264741586
-
-# Sessions: user_id -> total_amount
 sessions = {}
 
 def is_authorized(user_id: int) -> bool:
@@ -98,13 +95,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ No ZAR amounts found.")
 
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("calcy", calcy))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    logging.info("🤖 Bot is running on Render for BRO only...")
-    app.run_polling()
+# Minimal HTTP server to bind Render's required port and keep service alive
+async def handle_healthcheck(request):
+    return web.Response(text="I'm alive!")
+
+async def start_webserver():
+    app = web.Application()
+    app.router.add_get('/', handle_healthcheck)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get('PORT', 8000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    logging.info(f"🌐 Webserver running on port {port}")
+
+async def main():
+    # Start the webserver in the background
+    asyncio.create_task(start_webserver())
+
+    # Start the Telegram bot application
+    application = Application.builder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("calcy", calcy))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    logging.info("🤖 Telegram bot started and polling...")
+    await application.run_polling()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
